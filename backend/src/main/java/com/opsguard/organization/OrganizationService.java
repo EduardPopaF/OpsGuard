@@ -1,5 +1,6 @@
 package com.opsguard.organization;
 
+import com.opsguard.common.exception.ConflictException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +20,7 @@ public class OrganizationService {
     @Transactional
     public Organization create(String name, String slug) {
         if (organizationRepository.existsBySlug(slug)) {
-            throw new IllegalArgumentException(
+            throw new ConflictException(
                     "An organization with slug '" + slug + "' already exists."
             );
         }

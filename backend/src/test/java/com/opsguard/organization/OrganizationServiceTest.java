@@ -1,15 +1,18 @@
 package com.opsguard.organization;
 
+import com.opsguard.common.exception.ConflictException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class OrganizationServiceTest {
 
@@ -54,8 +57,8 @@ class OrganizationServiceTest {
         when(organizationRepository.existsBySlug("acme"))
                 .thenReturn(true);
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        ConflictException exception = assertThrows(
+                ConflictException.class,
                 () -> organizationService.create("Another Acme", "acme")
         );
 

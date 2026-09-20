@@ -1,5 +1,7 @@
 package com.opsguard.user;
 
+import com.opsguard.common.exception.ConflictException;
+import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationRepository;
 import org.springframework.stereotype.Service;
@@ -34,7 +36,7 @@ public class UserService {
     ) {
         Organization organization = organizationRepository
                 .findById(organizationId)
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new ResourceNotFoundException(
                         "Organization with id '" + organizationId + "' does not exist."
                 ));
 
@@ -46,7 +48,7 @@ public class UserService {
                 organizationId,
                 normalizedEmail
         )) {
-            throw new IllegalArgumentException(
+            throw new ConflictException(
                     "A user with email '" + normalizedEmail
                             + "' already exists in this organization."
             );

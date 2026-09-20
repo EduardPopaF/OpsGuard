@@ -1,5 +1,7 @@
 package com.opsguard.user;
 
+import com.opsguard.common.exception.ConflictException;
+import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationRepository;
 import com.opsguard.organization.OrganizationStatus;
@@ -100,8 +102,8 @@ class UserServiceTest {
         when(organizationRepository.findById(organizationId))
                 .thenReturn(Optional.empty());
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
                 () -> userService.create(
                         organizationId,
                         "john@example.com",
@@ -130,8 +132,8 @@ class UserServiceTest {
                 "john@example.com"
         )).thenReturn(true);
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
+        ConflictException exception = assertThrows(
+                ConflictException.class,
                 () -> userService.create(
                         organizationId,
                         "  John@Example.COM  ",
