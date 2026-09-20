@@ -1,0 +1,129 @@
+# ============================================================
+# OpsGuard — Git Ignore Rules
+# ============================================================
+
+# ------------------------------------------------------------
+# Operating system
+# ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ------------------------------------------------------------
+# IDEs and editors
+# ------------------------------------------------------------
+.idea/
+*.iml
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# ------------------------------------------------------------
+# Java / Spring Boot / Gradle / Maven
+# ------------------------------------------------------------
+backend/target/
+backend/build/
+backend/.gradle/
+backend/out/
+
+*.class
+*.log
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Keep build-system wrapper JARs if introduced later.
+!backend/gradle/wrapper/gradle-wrapper.jar
+!backend/.mvn/wrapper/maven-wrapper.jar
+
+# ------------------------------------------------------------
+# Node.js / Next.js
+# ------------------------------------------------------------
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/.turbo/
+frontend/.vercel/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ------------------------------------------------------------
+# Environment variables and secrets
+# ------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+infrastructure/.env
+infrastructure/.env.*
+!infrastructure/.env.example
+
+# ------------------------------------------------------------
+# Test coverage and reports
+# ------------------------------------------------------------
+coverage/
+frontend/coverage/
+backend/coverage/
+test-results/
+playwright-report/
+
+# ------------------------------------------------------------
+# Runtime and temporary files
+# ------------------------------------------------------------
+*.pid
+*.seed
+*.pid.lock
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+tmp/
+temp/
+
+# ------------------------------------------------------------
+# Local databases
+# ------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ------------------------------------------------------------
+# Docker / infrastructure local overrides
+# ------------------------------------------------------------
+docker-compose.override.yml
+compose.override.yml
+
+# ------------------------------------------------------------
+# Local certificates and private keys
+# ------------------------------------------------------------
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ------------------------------------------------------------
+# Local application data
+# ------------------------------------------------------------
+data/
+logs/
