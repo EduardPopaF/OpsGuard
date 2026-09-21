@@ -115,6 +115,63 @@ public class Incident {
         this.updatedAt = updatedAt;
     }
 
+    public void acknowledge(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.OPEN);
+
+        status = IncidentStatus.ACKNOWLEDGED;
+        acknowledgedAt = occurredAt;
+        updatedAt = occurredAt;
+    }
+
+    public void startInvestigation(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.ACKNOWLEDGED);
+
+        status = IncidentStatus.INVESTIGATING;
+        updatedAt = occurredAt;
+    }
+
+    public void mitigate(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.INVESTIGATING);
+
+        status = IncidentStatus.MITIGATED;
+        updatedAt = occurredAt;
+    }
+
+    public void startMonitoring(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.MITIGATED);
+
+        status = IncidentStatus.MONITORING;
+        updatedAt = occurredAt;
+    }
+
+    public void resolve(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.MONITORING);
+
+        status = IncidentStatus.RESOLVED;
+        resolvedAt = occurredAt;
+        updatedAt = occurredAt;
+    }
+
+    public void close(OffsetDateTime occurredAt) {
+        requireStatus(IncidentStatus.RESOLVED);
+
+        status = IncidentStatus.CLOSED;
+        closedAt = occurredAt;
+        updatedAt = occurredAt;
+    }
+
+    private void requireStatus(IncidentStatus requiredStatus) {
+        if (status != requiredStatus) {
+            throw new IllegalStateException(
+                    "Incident must be in status "
+                            + requiredStatus
+                            + " but is currently "
+                            + status
+                            + "."
+            );
+        }
+    }
+
     public UUID getId() {
         return id;
     }
