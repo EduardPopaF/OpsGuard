@@ -2,6 +2,7 @@ package com.opsguard.common.api;
 
 import com.opsguard.common.exception.AssignmentConflictException;
 import com.opsguard.common.exception.ConflictException;
+import com.opsguard.common.exception.IncidentModificationNotAllowedException;
 import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -86,6 +87,25 @@ public class GlobalExceptionHandler {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 "ASSIGNMENT_CONFLICT",
+                exception.getMessage(),
+                Map.of(),
+                request.getRequestURI(),
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(IncidentModificationNotAllowedException.class)
+    public ResponseEntity<ApiErrorResponse> handleIncidentModificationNotAllowed(
+            IncidentModificationNotAllowedException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "INCIDENT_MODIFICATION_NOT_ALLOWED",
                 exception.getMessage(),
                 Map.of(),
                 request.getRequestURI(),

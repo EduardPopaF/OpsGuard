@@ -4,6 +4,7 @@ import com.opsguard.incident.Incident;
 import com.opsguard.incident.IncidentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,6 +85,34 @@ public class IncidentController {
                         organizationId,
                         incidentId,
                         request.userId()
+                );
+
+        return IncidentResponse.from(incident);
+    }
+
+    @DeleteMapping("/{incidentId}/assignment/team")
+    public IncidentResponse unassignTeam(
+            @PathVariable UUID organizationId,
+            @PathVariable UUID incidentId
+    ) {
+        Incident incident =
+                incidentService.unassignTeam(
+                        organizationId,
+                        incidentId
+                );
+
+        return IncidentResponse.from(incident);
+    }
+
+    @DeleteMapping("/{incidentId}/assignment/user")
+    public IncidentResponse unassignUser(
+            @PathVariable UUID organizationId,
+            @PathVariable UUID incidentId
+    ) {
+        Incident incident =
+                incidentService.unassignUser(
+                        organizationId,
+                        incidentId
                 );
 
         return IncidentResponse.from(incident);

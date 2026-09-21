@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.IncidentModificationNotAllowedException;
 import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.organization.Organization;
 import com.opsguard.service.Service;
@@ -165,6 +166,8 @@ public class Incident {
             Team team,
             OffsetDateTime occurredAt
     ) {
+        requireModifiable();
+
         if (team == null) {
             throw new IllegalArgumentException(
                     "Assigned team is required."
@@ -184,6 +187,8 @@ public class Incident {
             User user,
             OffsetDateTime occurredAt
     ) {
+        requireModifiable();
+
         if (user == null) {
             throw new IllegalArgumentException(
                     "Assigned user is required."
@@ -201,11 +206,15 @@ public class Incident {
     }
 
     public void unassignUser(OffsetDateTime occurredAt) {
+        requireModifiable();
+
         assignedUser = null;
         updatedAt = occurredAt;
     }
 
     public void unassignTeam(OffsetDateTime occurredAt) {
+        requireModifiable();
+
         assignedTeam = null;
         assignedUser = null;
         updatedAt = occurredAt;
@@ -219,6 +228,14 @@ public class Incident {
                             + " but is currently "
                             + status
                             + "."
+            );
+        }
+    }
+
+    private void requireModifiable() {
+        if (status == IncidentStatus.CLOSED) {
+            throw new IncidentModificationNotAllowedException(
+                    "A closed incident cannot be modified."
             );
         }
     }

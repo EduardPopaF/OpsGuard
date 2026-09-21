@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.IncidentModificationNotAllowedException;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationStatus;
 import com.opsguard.team.Team;
@@ -365,6 +366,174 @@ class IncidentAssignmentTest {
         );
     }
 
+    @Test
+    void shouldRejectTeamAssignmentWhenIncidentIsClosed() {
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(createdAt);
+
+        Team team =
+                createTeam(organization, createdAt);
+
+        Incident incident =
+                createClosedIncident(
+                        organization,
+                        createdAt
+                );
+
+        OffsetDateTime beforeAttempt =
+                incident.getUpdatedAt();
+
+        assertThrows(
+                IncidentModificationNotAllowedException.class,
+                () -> incident.assignTeam(
+                        team,
+                        createdAt.plusMinutes(1)
+                )
+        );
+
+        assertNull(incident.getAssignedTeam());
+
+        assertEquals(
+                beforeAttempt,
+                incident.getUpdatedAt()
+        );
+    }
+
+    @Test
+    void shouldRejectUserAssignmentWhenIncidentIsClosed() {
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(createdAt);
+
+        Team team =
+                createTeam(organization, createdAt);
+
+        User user =
+                createUser(organization, createdAt);
+
+        Incident incident =
+                createClosedIncident(
+                        organization,
+                        team,
+                        null,
+                        createdAt
+                );
+
+        OffsetDateTime beforeAttempt =
+                incident.getUpdatedAt();
+
+        assertThrows(
+                IncidentModificationNotAllowedException.class,
+                () -> incident.assignUser(
+                        user,
+                        createdAt.plusMinutes(1)
+                )
+        );
+
+        assertNull(incident.getAssignedUser());
+
+        assertEquals(
+                beforeAttempt,
+                incident.getUpdatedAt()
+        );
+    }
+
+    @Test
+    void shouldRejectUserUnassignmentWhenIncidentIsClosed() {
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(createdAt);
+
+        Team team =
+                createTeam(organization, createdAt);
+
+        User user =
+                createUser(organization, createdAt);
+
+        Incident incident =
+                createClosedIncident(
+                        organization,
+                        team,
+                        user,
+                        createdAt
+                );
+
+        OffsetDateTime beforeAttempt =
+                incident.getUpdatedAt();
+
+        assertThrows(
+                IncidentModificationNotAllowedException.class,
+                () -> incident.unassignUser(
+                        createdAt.plusMinutes(1)
+                )
+        );
+
+        assertEquals(
+                user,
+                incident.getAssignedUser()
+        );
+
+        assertEquals(
+                beforeAttempt,
+                incident.getUpdatedAt()
+        );
+    }
+
+    @Test
+    void shouldRejectTeamUnassignmentWhenIncidentIsClosed() {
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(createdAt);
+
+        Team team =
+                createTeam(organization, createdAt);
+
+        User user =
+                createUser(organization, createdAt);
+
+        Incident incident =
+                createClosedIncident(
+                        organization,
+                        team,
+                        user,
+                        createdAt
+                );
+
+        OffsetDateTime beforeAttempt =
+                incident.getUpdatedAt();
+
+        assertThrows(
+                IncidentModificationNotAllowedException.class,
+                () -> incident.unassignTeam(
+                        createdAt.plusMinutes(1)
+                )
+        );
+
+        assertEquals(
+                team,
+                incident.getAssignedTeam()
+        );
+
+        assertEquals(
+                user,
+                incident.getAssignedUser()
+        );
+
+        assertEquals(
+                beforeAttempt,
+                incident.getUpdatedAt()
+        );
+    }
+
     private Organization createOrganization(
             OffsetDateTime createdAt
     ) {
@@ -443,6 +612,44 @@ class IncidentAssignmentTest {
                 null,
                 null,
                 createdAt
+        );
+    }
+
+    private Incident createClosedIncident(
+            Organization organization,
+            OffsetDateTime createdAt
+    ) {
+        return createClosedIncident(
+                organization,
+                null,
+                null,
+                createdAt
+        );
+    }
+
+    private Incident createClosedIncident(
+            Organization organization,
+            Team assignedTeam,
+            User assignedUser,
+            OffsetDateTime createdAt
+    ) {
+        return new Incident(
+                UUID.randomUUID(),
+                organization,
+                "INC-000001",
+                "Payment API unavailable",
+                null,
+                IncidentSeverity.SEV1,
+                IncidentStatus.CLOSED,
+                null,
+                assignedTeam,
+                assignedUser,
+                null,
+                createdAt,
+                createdAt.plusMinutes(1),
+                createdAt.plusMinutes(2),
+                createdAt.plusMinutes(3),
+                createdAt.plusMinutes(3)
         );
     }
 }

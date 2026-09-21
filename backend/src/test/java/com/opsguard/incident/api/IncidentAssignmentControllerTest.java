@@ -2,6 +2,7 @@ package com.opsguard.incident.api;
 
 import com.opsguard.common.api.GlobalExceptionHandler;
 import com.opsguard.common.exception.AssignmentConflictException;
+import com.opsguard.common.exception.IncidentModificationNotAllowedException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.incident.Incident;
 import com.opsguard.incident.IncidentService;
@@ -9,6 +10,7 @@ import com.opsguard.incident.IncidentSeverity;
 import com.opsguard.incident.IncidentStatus;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationStatus;
+import com.opsguard.service.Service;
 import com.opsguard.team.Team;
 import com.opsguard.team.TeamStatus;
 import com.opsguard.user.User;
@@ -19,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import com.opsguard.service.Service;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -28,6 +29,7 @@ import java.util.UUID;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -218,6 +220,112 @@ class IncidentAssignmentControllerTest {
                 organizationId,
                 incidentId,
                 userId
+        );
+    }
+
+    @Test
+    void shouldUnassignUser()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(
+                        organizationId,
+                        now
+                );
+
+        Incident incident =
+                createIncident(
+                        incidentId,
+                        organization,
+                        now
+                );
+
+        when(incidentService.unassignUser(
+                organizationId,
+                incidentId
+        )).thenReturn(incident);
+
+        mockMvc.perform(
+                        delete(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/user",
+                                organizationId,
+                                incidentId
+                        )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(incidentId.toString())
+                )
+                .andExpect(
+                        jsonPath("$.assignedUserId")
+                                .doesNotExist()
+                );
+
+        verify(incidentService).unassignUser(
+                organizationId,
+                incidentId
+        );
+    }
+
+    @Test
+    void shouldUnassignTeam()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization =
+                createOrganization(
+                        organizationId,
+                        now
+                );
+
+        Incident incident =
+                createIncident(
+                        incidentId,
+                        organization,
+                        now
+                );
+
+        when(incidentService.unassignTeam(
+                organizationId,
+                incidentId
+        )).thenReturn(incident);
+
+        mockMvc.perform(
+                        delete(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/team",
+                                organizationId,
+                                incidentId
+                        )
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(incidentId.toString())
+                )
+                .andExpect(
+                        jsonPath("$.assignedTeamId")
+                                .doesNotExist()
+                )
+                .andExpect(
+                        jsonPath("$.assignedUserId")
+                                .doesNotExist()
+                );
+
+        verify(incidentService).unassignTeam(
+                organizationId,
+                incidentId
         );
     }
 
@@ -438,6 +546,176 @@ class IncidentAssignmentControllerTest {
     }
 
     @Test
+    void shouldRejectTeamAssignmentWhenIncidentIsClosed()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+
+        when(incidentService.assignTeam(
+                organizationId,
+                incidentId,
+                teamId
+        )).thenThrow(
+                new IncidentModificationNotAllowedException(
+                        "A closed incident cannot be modified."
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/team",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "teamId": "%s"
+                                        }
+                                        """.formatted(teamId)
+                                )
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(409)
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value(
+                                        "INCIDENT_MODIFICATION_NOT_ALLOWED"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.message")
+                                .value(
+                                        "A closed incident cannot be modified."
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectUserAssignmentWhenIncidentIsClosed()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        when(incidentService.assignUser(
+                organizationId,
+                incidentId,
+                userId
+        )).thenThrow(
+                new IncidentModificationNotAllowedException(
+                        "A closed incident cannot be modified."
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/user",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        """
+                                        {
+                                          "userId": "%s"
+                                        }
+                                        """.formatted(userId)
+                                )
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(409)
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value(
+                                        "INCIDENT_MODIFICATION_NOT_ALLOWED"
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectTeamUnassignmentWhenIncidentIsClosed()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        when(incidentService.unassignTeam(
+                organizationId,
+                incidentId
+        )).thenThrow(
+                new IncidentModificationNotAllowedException(
+                        "A closed incident cannot be modified."
+                )
+        );
+
+        mockMvc.perform(
+                        delete(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/team",
+                                organizationId,
+                                incidentId
+                        )
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(409)
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value(
+                                        "INCIDENT_MODIFICATION_NOT_ALLOWED"
+                                )
+                );
+    }
+
+    @Test
+    void shouldRejectUserUnassignmentWhenIncidentIsClosed()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        when(incidentService.unassignUser(
+                organizationId,
+                incidentId
+        )).thenThrow(
+                new IncidentModificationNotAllowedException(
+                        "A closed incident cannot be modified."
+                )
+        );
+
+        mockMvc.perform(
+                        delete(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/assignment/user",
+                                organizationId,
+                                incidentId
+                        )
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(409)
+                )
+                .andExpect(
+                        jsonPath("$.code")
+                                .value(
+                                        "INCIDENT_MODIFICATION_NOT_ALLOWED"
+                                )
+                );
+    }
+
+    @Test
     void shouldRejectInvalidOrganizationId()
             throws Exception {
 
@@ -618,40 +896,40 @@ class IncidentAssignmentControllerTest {
     }
 
     private Incident createIncident(
-        UUID incidentId,
-        Organization organization,
-        OffsetDateTime createdAt
-) {
-    UUID serviceId = UUID.randomUUID();
+            UUID incidentId,
+            Organization organization,
+            OffsetDateTime createdAt
+    ) {
+        UUID serviceId = UUID.randomUUID();
 
-    Service service = mock(Service.class);
+        Service service = mock(Service.class);
 
-    when(service.getId())
-            .thenReturn(serviceId);
+        when(service.getId())
+                .thenReturn(serviceId);
 
-    User createdBy = createUser(
-            UUID.randomUUID(),
-            organization,
-            createdAt
-    );
+        User createdBy = createUser(
+                UUID.randomUUID(),
+                organization,
+                createdAt
+        );
 
-    return new Incident(
-            incidentId,
-            organization,
-            "INC-000001",
-            "Payment API unavailable",
-            null,
-            IncidentSeverity.SEV1,
-            IncidentStatus.OPEN,
-            service,
-            null,
-            null,
-            createdBy,
-            createdAt,
-            null,
-            null,
-            null,
-            createdAt
-    );
-}
+        return new Incident(
+                incidentId,
+                organization,
+                "INC-000001",
+                "Payment API unavailable",
+                null,
+                IncidentSeverity.SEV1,
+                IncidentStatus.OPEN,
+                service,
+                null,
+                null,
+                createdBy,
+                createdAt,
+                null,
+                null,
+                null,
+                createdAt
+        );
+    }
 }
