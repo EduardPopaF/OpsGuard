@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.organization.Organization;
 import com.opsguard.service.Service;
 import com.opsguard.team.Team;
@@ -162,7 +163,7 @@ public class Incident {
 
     private void requireStatus(IncidentStatus requiredStatus) {
         if (status != requiredStatus) {
-            throw new IllegalStateException(
+            throw new InvalidStateTransitionException(
                     "Incident must be in status "
                             + requiredStatus
                             + " but is currently "

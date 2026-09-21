@@ -111,4 +111,47 @@ public class IncidentService {
 
         return incidentRepository.save(incident);
     }
+
+    @Transactional
+    public Incident executeLifecycleAction(
+            UUID organizationId,
+            UUID incidentId,
+            IncidentLifecycleAction action
+    ) {
+        Incident incident = incidentRepository
+                .findByIdAndOrganizationId(
+                        incidentId,
+                        organizationId
+                )
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Incident with id '"
+                                + incidentId
+                                + "' does not exist in this organization."
+                ));
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        switch (action) {
+            case ACKNOWLEDGE ->
+                    incident.acknowledge(now);
+
+            case START_INVESTIGATION ->
+                    incident.startInvestigation(now);
+
+            case MITIGATE ->
+                    incident.mitigate(now);
+
+            case START_MONITORING ->
+                    incident.startMonitoring(now);
+
+            case RESOLVE ->
+                    incident.resolve(now);
+
+            case CLOSE ->
+                    incident.close(now);
+        }
+
+        return incidentRepository.save(incident);
+    }
 }

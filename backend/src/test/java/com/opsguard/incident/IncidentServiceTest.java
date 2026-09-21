@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationRepository;
@@ -392,5 +393,198 @@ class IncidentServiceTest {
 
         verify(incidentRepository, never())
                 .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldAcknowledgeOpenIncident() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                createdAt
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        Incident result =
+                incidentService.executeLifecycleAction(
+                        organizationId,
+                        incidentId,
+                        IncidentLifecycleAction.ACKNOWLEDGE
+                );
+
+        assertEquals(
+                IncidentStatus.ACKNOWLEDGED,
+                result.getStatus()
+        );
+
+        assertNotNull(result.getAcknowledgedAt());
+
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void shouldExecuteCompleteLifecycle() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                createdAt
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.ACKNOWLEDGE
+        );
+
+        incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.START_INVESTIGATION
+        );
+
+        incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.MITIGATE
+        );
+
+        incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.START_MONITORING
+        );
+
+        incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.RESOLVE
+        );
+
+        Incident result =
+                incidentService.executeLifecycleAction(
+                        organizationId,
+                        incidentId,
+                        IncidentLifecycleAction.CLOSE
+                );
+
+        assertEquals(
+                IncidentStatus.CLOSED,
+                result.getStatus()
+        );
+
+        assertNotNull(result.getAcknowledgedAt());
+        assertNotNull(result.getResolvedAt());
+        assertNotNull(result.getClosedAt());
+    }
+
+    @Test
+    void shouldRejectInvalidLifecycleTransition() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                createdAt
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        assertThrows(
+                InvalidStateTransitionException.class,
+                () -> incidentService.executeLifecycleAction(
+                        organizationId,
+                        incidentId,
+                        IncidentLifecycleAction.CLOSE
+                )
+        );
+
+        assertEquals(
+                IncidentStatus.OPEN,
+                incident.getStatus()
+        );
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldRejectLifecycleActionForIncidentOutsideOrganization() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> incidentService.executeLifecycleAction(
+                        organizationId,
+                        incidentId,
+                        IncidentLifecycleAction.ACKNOWLEDGE
+                )
+        );
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    private Incident createIncident(
+            UUID incidentId,
+            IncidentStatus status,
+            OffsetDateTime createdAt
+    ) {
+        return new Incident(
+                incidentId,
+                null,
+                "INC-000001",
+                "Payment API unavailable",
+                null,
+                IncidentSeverity.SEV1,
+                status,
+                null,
+                null,
+                null,
+                null,
+                createdAt,
+                null,
+                null,
+                null,
+                createdAt
+        );
     }
 }

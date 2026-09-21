@@ -3,6 +3,7 @@ package com.opsguard.incident.api;
 import com.opsguard.common.api.GlobalExceptionHandler;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.incident.Incident;
+import com.opsguard.incident.IncidentLifecycleAction;
 import com.opsguard.incident.IncidentService;
 import com.opsguard.incident.IncidentSeverity;
 import com.opsguard.incident.IncidentStatus;
@@ -395,6 +396,228 @@ class IncidentControllerTest {
         mockMvc.perform(
                         post(
                                 "/api/organizations/{organizationId}/incidents",
+                                "not-a-uuid"
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code")
+                        .value("INVALID_PARAMETER"));
+    }
+
+    @Test
+    void shouldAcknowledgeIncidentThroughLifecycleEndpoint()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+        UUID serviceId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime createdAt =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = new Organization(
+                organizationId,
+                "Acme Corporation",
+                "acme-corporation",
+                OrganizationStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+
+        Team ownerTeam = new Team(
+                teamId,
+                organization,
+                "Platform Engineering",
+                null,
+                TeamStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+
+        com.opsguard.service.Service affectedService =
+                new com.opsguard.service.Service(
+                        serviceId,
+                        organization,
+                        "Payment API",
+                        null,
+                        ownerTeam,
+                        ServiceCriticality.CRITICAL,
+                        ServiceStatus.ACTIVE,
+                        createdAt,
+                        createdAt
+                );
+
+        User createdBy = new User(
+                userId,
+                organization,
+                "engineer@acme.com",
+                "John",
+                "Doe",
+                UserRole.ENGINEER,
+                UserStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+
+        OffsetDateTime acknowledgedAt =
+                createdAt.plusMinutes(5);
+
+        Incident incident = new Incident(
+                incidentId,
+                organization,
+                "INC-000001",
+                "Payment API unavailable",
+                null,
+                IncidentSeverity.SEV1,
+                IncidentStatus.ACKNOWLEDGED,
+                affectedService,
+                null,
+                null,
+                createdBy,
+                createdAt,
+                acknowledgedAt,
+                null,
+                null,
+                acknowledgedAt
+        );
+
+        when(incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.ACKNOWLEDGE
+        )).thenReturn(incident);
+
+        String requestBody = """
+                {
+                  "action": "ACKNOWLEDGE"
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/lifecycle",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id")
+                        .value(incidentId.toString()))
+                .andExpect(jsonPath("$.incidentNumber")
+                        .value("INC-000001"))
+                .andExpect(jsonPath("$.status")
+                        .value("ACKNOWLEDGED"))
+                .andExpect(jsonPath("$.acknowledgedAt")
+                        .exists());
+
+        verify(incidentService).executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.ACKNOWLEDGE
+        );
+    }
+
+    @Test
+    void shouldRejectMissingLifecycleAction() throws Exception {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/lifecycle",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code")
+                        .value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void shouldRejectInvalidLifecycleAction() throws Exception {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "action": "DELETE_EVERYTHING"
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/lifecycle",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code")
+                        .value("MALFORMED_REQUEST"));
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenLifecycleIncidentDoesNotExist()
+            throws Exception {
+
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        when(incidentService.executeLifecycleAction(
+                organizationId,
+                incidentId,
+                IncidentLifecycleAction.ACKNOWLEDGE
+        )).thenThrow(
+                new ResourceNotFoundException(
+                        "Incident does not exist in this organization."
+                )
+        );
+
+        String requestBody = """
+                {
+                  "action": "ACKNOWLEDGE"
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/lifecycle",
+                                organizationId,
+                                incidentId
+                        )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code")
+                        .value("RESOURCE_NOT_FOUND"));
+    }
+
+    @Test
+    void shouldRejectInvalidLifecycleIncidentId() throws Exception {
+        UUID organizationId = UUID.randomUUID();
+
+        String requestBody = """
+                {
+                  "action": "ACKNOWLEDGE"
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/organizations/{organizationId}/incidents/{incidentId}/lifecycle",
+                                organizationId,
                                 "not-a-uuid"
                         )
                                 .contentType(MediaType.APPLICATION_JSON)

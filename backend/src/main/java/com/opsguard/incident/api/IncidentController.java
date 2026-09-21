@@ -40,4 +40,20 @@ public class IncidentController {
 
         return IncidentResponse.from(incident);
     }
+
+    @PostMapping("/{incidentId}/lifecycle")
+    public IncidentResponse executeLifecycleAction(
+            @PathVariable UUID organizationId,
+            @PathVariable UUID incidentId,
+            @Valid @RequestBody IncidentLifecycleRequest request
+    ) {
+        Incident incident =
+                incidentService.executeLifecycleAction(
+                        organizationId,
+                        incidentId,
+                        request.action()
+                );
+
+        return IncidentResponse.from(incident);
+    }
 }

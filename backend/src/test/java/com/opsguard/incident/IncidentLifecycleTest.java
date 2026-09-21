@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.InvalidStateTransitionException;
 import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
@@ -7,13 +8,14 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class IncidentLifecycleTest {
 
     @Test
-    void shouldFollowCompleteIncidentLifecycle() {
+    void shouldExecuteCompleteLifecycle() {
         OffsetDateTime createdAt =
                 OffsetDateTime.of(
                         2026,
@@ -26,10 +28,7 @@ class IncidentLifecycleTest {
                         ZoneOffset.UTC
                 );
 
-        Incident incident = createIncident(
-                IncidentStatus.OPEN,
-                createdAt
-        );
+        Incident incident = createOpenIncident(createdAt);
 
         OffsetDateTime acknowledgedAt =
                 createdAt.plusMinutes(5);
@@ -78,7 +77,7 @@ class IncidentLifecycleTest {
         );
 
         OffsetDateTime monitoringAt =
-                createdAt.plusMinutes(30);
+                createdAt.plusMinutes(25);
 
         incident.startMonitoring(monitoringAt);
 
@@ -92,7 +91,7 @@ class IncidentLifecycleTest {
         );
 
         OffsetDateTime resolvedAt =
-                createdAt.plusMinutes(40);
+                createdAt.plusMinutes(30);
 
         incident.resolve(resolvedAt);
 
@@ -110,7 +109,7 @@ class IncidentLifecycleTest {
         );
 
         OffsetDateTime closedAt =
-                createdAt.plusMinutes(50);
+                createdAt.plusMinutes(40);
 
         incident.close(closedAt);
 
@@ -126,6 +125,10 @@ class IncidentLifecycleTest {
                 closedAt,
                 incident.getUpdatedAt()
         );
+
+        assertNotNull(incident.getAcknowledgedAt());
+        assertNotNull(incident.getResolvedAt());
+        assertNotNull(incident.getClosedAt());
     }
 
     @Test
@@ -133,16 +136,19 @@ class IncidentLifecycleTest {
         OffsetDateTime createdAt =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
-        Incident incident = createIncident(
-                IncidentStatus.OPEN,
-                createdAt
-        );
+        Incident incident = createOpenIncident(createdAt);
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> incident.close(
-                        createdAt.plusMinutes(1)
-                )
+        InvalidStateTransitionException exception =
+                assertThrows(
+                        InvalidStateTransitionException.class,
+                        () -> incident.close(
+                                createdAt.plusMinutes(1)
+                        )
+                );
+
+        assertEquals(
+                "Incident must be in status RESOLVED but is currently OPEN.",
+                exception.getMessage()
         );
 
         assertEquals(
@@ -163,13 +169,10 @@ class IncidentLifecycleTest {
         OffsetDateTime createdAt =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
-        Incident incident = createIncident(
-                IncidentStatus.OPEN,
-                createdAt
-        );
+        Incident incident = createOpenIncident(createdAt);
 
         assertThrows(
-                IllegalStateException.class,
+                InvalidStateTransitionException.class,
                 () -> incident.startInvestigation(
                         createdAt.plusMinutes(1)
                 )
@@ -179,6 +182,8 @@ class IncidentLifecycleTest {
                 IncidentStatus.OPEN,
                 incident.getStatus()
         );
+
+        assertNull(incident.getAcknowledgedAt());
 
         assertEquals(
                 createdAt,
@@ -191,15 +196,20 @@ class IncidentLifecycleTest {
         OffsetDateTime createdAt =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
-        Incident incident = createIncident(
-                IncidentStatus.INVESTIGATING,
-                createdAt
+        Incident incident = createOpenIncident(createdAt);
+
+        incident.acknowledge(
+                createdAt.plusMinutes(1)
+        );
+
+        incident.startInvestigation(
+                createdAt.plusMinutes(2)
         );
 
         assertThrows(
-                IllegalStateException.class,
+                InvalidStateTransitionException.class,
                 () -> incident.resolve(
-                        createdAt.plusMinutes(1)
+                        createdAt.plusMinutes(3)
                 )
         );
 
@@ -216,10 +226,7 @@ class IncidentLifecycleTest {
         OffsetDateTime createdAt =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
-        Incident incident = createIncident(
-                IncidentStatus.OPEN,
-                createdAt
-        );
+        Incident incident = createOpenIncident(createdAt);
 
         OffsetDateTime firstAcknowledgement =
                 createdAt.plusMinutes(1);
@@ -227,7 +234,7 @@ class IncidentLifecycleTest {
         incident.acknowledge(firstAcknowledgement);
 
         assertThrows(
-                IllegalStateException.class,
+                InvalidStateTransitionException.class,
                 () -> incident.acknowledge(
                         createdAt.plusMinutes(2)
                 )
@@ -249,8 +256,7 @@ class IncidentLifecycleTest {
         );
     }
 
-    private Incident createIncident(
-            IncidentStatus status,
+    private Incident createOpenIncident(
             OffsetDateTime createdAt
     ) {
         return new Incident(
@@ -260,7 +266,7 @@ class IncidentLifecycleTest {
                 "Payment API unavailable",
                 null,
                 IncidentSeverity.SEV1,
-                status,
+                IncidentStatus.OPEN,
                 null,
                 null,
                 null,

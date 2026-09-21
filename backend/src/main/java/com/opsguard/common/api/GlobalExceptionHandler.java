@@ -1,6 +1,7 @@
 package com.opsguard.common.api;
 
 import com.opsguard.common.exception.ConflictException;
+import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,25 @@ public class GlobalExceptionHandler {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 "CONFLICT",
+                exception.getMessage(),
+                Map.of(),
+                request.getRequestURI(),
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidStateTransition(
+            InvalidStateTransitionException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "INVALID_STATE_TRANSITION",
                 exception.getMessage(),
                 Map.of(),
                 request.getRequestURI(),
