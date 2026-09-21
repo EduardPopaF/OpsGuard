@@ -7,6 +7,11 @@ import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
+    Optional<User> findByIdAndOrganizationId(
+            UUID id,
+            UUID organizationId
+    );
+
     Optional<User> findByOrganizationIdAndEmailIgnoreCase(
             UUID organizationId,
             String email
