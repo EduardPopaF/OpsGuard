@@ -1,5 +1,6 @@
 package com.opsguard.common.api;
 
+import com.opsguard.common.exception.AssignmentConflictException;
 import com.opsguard.common.exception.ConflictException;
 import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.common.exception.ResourceNotFoundException;
@@ -66,6 +67,25 @@ public class GlobalExceptionHandler {
         ApiErrorResponse response = new ApiErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 "INVALID_STATE_TRANSITION",
+                exception.getMessage(),
+                Map.of(),
+                request.getRequestURI(),
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(response);
+    }
+
+    @ExceptionHandler(AssignmentConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleAssignmentConflict(
+            AssignmentConflictException exception,
+            HttpServletRequest request
+    ) {
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "ASSIGNMENT_CONFLICT",
                 exception.getMessage(),
                 Map.of(),
                 request.getRequestURI(),

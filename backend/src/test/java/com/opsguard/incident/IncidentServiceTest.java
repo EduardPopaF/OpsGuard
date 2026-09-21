@@ -1,5 +1,6 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.AssignmentConflictException;
 import com.opsguard.common.exception.InvalidStateTransitionException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.organization.Organization;
@@ -9,6 +10,8 @@ import com.opsguard.service.ServiceCriticality;
 import com.opsguard.service.ServiceRepository;
 import com.opsguard.service.ServiceStatus;
 import com.opsguard.team.Team;
+import com.opsguard.team.TeamMemberRepository;
+import com.opsguard.team.TeamRepository;
 import com.opsguard.team.TeamStatus;
 import com.opsguard.user.User;
 import com.opsguard.user.UserRepository;
@@ -38,6 +41,8 @@ class IncidentServiceTest {
     private OrganizationRepository organizationRepository;
     private ServiceRepository serviceRepository;
     private UserRepository userRepository;
+    private TeamRepository teamRepository;
+    private TeamMemberRepository teamMemberRepository;
     private IncidentNumberGenerator incidentNumberGenerator;
     private IncidentService incidentService;
 
@@ -47,6 +52,8 @@ class IncidentServiceTest {
         organizationRepository = mock(OrganizationRepository.class);
         serviceRepository = mock(ServiceRepository.class);
         userRepository = mock(UserRepository.class);
+        teamRepository = mock(TeamRepository.class);
+        teamMemberRepository = mock(TeamMemberRepository.class);
         incidentNumberGenerator = mock(IncidentNumberGenerator.class);
 
         incidentService = new IncidentService(
@@ -54,6 +61,8 @@ class IncidentServiceTest {
                 organizationRepository,
                 serviceRepository,
                 userRepository,
+                teamRepository,
+                teamMemberRepository,
                 incidentNumberGenerator
         );
     }
@@ -67,47 +76,32 @@ class IncidentServiceTest {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        Organization organization = new Organization(
+        Organization organization = createOrganization(
                 organizationId,
                 "Acme Corporation",
                 "acme-corporation",
-                OrganizationStatus.ACTIVE,
-                now,
                 now
         );
 
-        Team ownerTeam = new Team(
+        Team ownerTeam = createTeam(
                 teamId,
                 organization,
                 "Platform Engineering",
-                null,
-                TeamStatus.ACTIVE,
-                now,
                 now
         );
 
         com.opsguard.service.Service affectedService =
-                new com.opsguard.service.Service(
+                createService(
                         serviceId,
                         organization,
-                        "Payment API",
-                        null,
                         ownerTeam,
-                        ServiceCriticality.CRITICAL,
-                        ServiceStatus.ACTIVE,
-                        now,
                         now
                 );
 
-        User createdBy = new User(
+        User createdBy = createUser(
                 userId,
                 organization,
                 "engineer@acme.com",
-                "John",
-                "Doe",
-                UserRole.ENGINEER,
-                UserStatus.ACTIVE,
-                now,
                 now
         );
 
@@ -173,47 +167,32 @@ class IncidentServiceTest {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        Organization organization = new Organization(
+        Organization organization = createOrganization(
                 organizationId,
                 "Acme Corporation",
                 "acme-corporation",
-                OrganizationStatus.ACTIVE,
-                now,
                 now
         );
 
-        Team ownerTeam = new Team(
+        Team ownerTeam = createTeam(
                 teamId,
                 organization,
                 "Platform Engineering",
-                null,
-                TeamStatus.ACTIVE,
-                now,
                 now
         );
 
         com.opsguard.service.Service affectedService =
-                new com.opsguard.service.Service(
+                createService(
                         serviceId,
                         organization,
-                        "Payment API",
-                        null,
                         ownerTeam,
-                        ServiceCriticality.CRITICAL,
-                        ServiceStatus.ACTIVE,
-                        now,
                         now
                 );
 
-        User createdBy = new User(
+        User createdBy = createUser(
                 userId,
                 organization,
                 "engineer@acme.com",
-                "John",
-                "Doe",
-                UserRole.ENGINEER,
-                UserStatus.ACTIVE,
-                now,
                 now
         );
 
@@ -283,12 +262,10 @@ class IncidentServiceTest {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        Organization organization = new Organization(
+        Organization organization = createOrganization(
                 organizationId,
                 "Company A",
                 "company-a",
-                OrganizationStatus.ACTIVE,
-                now,
                 now
         );
 
@@ -331,35 +308,25 @@ class IncidentServiceTest {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        Organization organization = new Organization(
+        Organization organization = createOrganization(
                 organizationId,
                 "Company A",
                 "company-a",
-                OrganizationStatus.ACTIVE,
-                now,
                 now
         );
 
-        Team ownerTeam = new Team(
+        Team ownerTeam = createTeam(
                 teamId,
                 organization,
                 "Platform Engineering",
-                null,
-                TeamStatus.ACTIVE,
-                now,
                 now
         );
 
         com.opsguard.service.Service affectedService =
-                new com.opsguard.service.Service(
+                createService(
                         serviceId,
                         organization,
-                        "Payment API",
-                        null,
                         ownerTeam,
-                        ServiceCriticality.CRITICAL,
-                        ServiceStatus.ACTIVE,
-                        now,
                         now
                 );
 
@@ -561,6 +528,584 @@ class IncidentServiceTest {
 
         verify(incidentRepository, never())
                 .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldAssignTeamFromSameOrganization() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        Team team = createTeam(
+                teamId,
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(teamRepository.findByIdAndOrganizationId(
+                teamId,
+                organizationId
+        )).thenReturn(Optional.of(team));
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        Incident result = incidentService.assignTeam(
+                organizationId,
+                incidentId,
+                teamId
+        );
+
+        assertEquals(teamId, result.getAssignedTeam().getId());
+
+        verify(teamRepository).findByIdAndOrganizationId(
+                teamId,
+                organizationId
+        );
+
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void shouldRejectTeamFromDifferentOrganization() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(teamRepository.findByIdAndOrganizationId(
+                teamId,
+                organizationId
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> incidentService.assignTeam(
+                        organizationId,
+                        incidentId,
+                        teamId
+                )
+        );
+
+        assertNull(incident.getAssignedTeam());
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldAssignUserWhenUserBelongsToAssignedTeam() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        Team team = createTeam(
+                teamId,
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        User user = createUser(
+                userId,
+                organization,
+                "engineer@company-a.com",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        incident.assignTeam(
+                team,
+                now.plusMinutes(1)
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(userRepository.findByIdAndOrganizationId(
+                userId,
+                organizationId
+        )).thenReturn(Optional.of(user));
+
+        when(teamMemberRepository.existsByTeamIdAndUserId(
+                teamId,
+                userId
+        )).thenReturn(true);
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        Incident result = incidentService.assignUser(
+                organizationId,
+                incidentId,
+                userId
+        );
+
+        assertEquals(userId, result.getAssignedUser().getId());
+
+        verify(userRepository).findByIdAndOrganizationId(
+                userId,
+                organizationId
+        );
+
+        verify(teamMemberRepository).existsByTeamIdAndUserId(
+                teamId,
+                userId
+        );
+
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void shouldRejectUserAssignmentWhenIncidentHasNoAssignedTeam() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        assertThrows(
+                AssignmentConflictException.class,
+                () -> incidentService.assignUser(
+                        organizationId,
+                        incidentId,
+                        userId
+                )
+        );
+
+        verify(userRepository, never())
+                .findByIdAndOrganizationId(any(), any());
+
+        verify(teamMemberRepository, never())
+                .existsByTeamIdAndUserId(any(), any());
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldRejectUserWhoIsNotMemberOfAssignedTeam() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        Team team = createTeam(
+                teamId,
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        User user = createUser(
+                userId,
+                organization,
+                "engineer@company-a.com",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        incident.assignTeam(
+                team,
+                now.plusMinutes(1)
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(userRepository.findByIdAndOrganizationId(
+                userId,
+                organizationId
+        )).thenReturn(Optional.of(user));
+
+        when(teamMemberRepository.existsByTeamIdAndUserId(
+                teamId,
+                userId
+        )).thenReturn(false);
+
+        assertThrows(
+                AssignmentConflictException.class,
+                () -> incidentService.assignUser(
+                        organizationId,
+                        incidentId,
+                        userId
+                )
+        );
+
+        assertNull(incident.getAssignedUser());
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldRejectUserFromDifferentOrganization() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        Team team = createTeam(
+                teamId,
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        incident.assignTeam(
+                team,
+                now.plusMinutes(1)
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(userRepository.findByIdAndOrganizationId(
+                userId,
+                organizationId
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> incidentService.assignUser(
+                        organizationId,
+                        incidentId,
+                        userId
+                )
+        );
+
+        assertNull(incident.getAssignedUser());
+
+        verify(teamMemberRepository, never())
+                .existsByTeamIdAndUserId(any(), any());
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    @Test
+    void shouldUnassignUser() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        User user = createUser(
+                UUID.randomUUID(),
+                organization,
+                "engineer@company-a.com",
+                now
+        );
+
+        Team team = createTeam(
+                UUID.randomUUID(),
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        incident.assignTeam(
+                team,
+                now.plusMinutes(1)
+        );
+
+        incident.assignUser(
+                user,
+                now.plusMinutes(2)
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        Incident result = incidentService.unassignUser(
+                organizationId,
+                incidentId
+        );
+
+        assertNull(result.getAssignedUser());
+
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void shouldUnassignTeamAndUserTogether() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Organization organization = createOrganization(
+                organizationId,
+                "Company A",
+                "company-a",
+                now
+        );
+
+        Team team = createTeam(
+                UUID.randomUUID(),
+                organization,
+                "Platform Engineering",
+                now
+        );
+
+        User user = createUser(
+                UUID.randomUUID(),
+                organization,
+                "engineer@company-a.com",
+                now
+        );
+
+        Incident incident = createIncident(
+                incidentId,
+                IncidentStatus.OPEN,
+                now
+        );
+
+        incident.assignTeam(
+                team,
+                now.plusMinutes(1)
+        );
+
+        incident.assignUser(
+                user,
+                now.plusMinutes(2)
+        );
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.of(incident));
+
+        when(incidentRepository.save(incident))
+                .thenReturn(incident);
+
+        Incident result = incidentService.unassignTeam(
+                organizationId,
+                incidentId
+        );
+
+        assertNull(result.getAssignedTeam());
+        assertNull(result.getAssignedUser());
+
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void shouldRejectAssignmentWhenIncidentIsOutsideOrganization() {
+        UUID organizationId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        UUID teamId = UUID.randomUUID();
+
+        when(incidentRepository.findByIdAndOrganizationId(
+                incidentId,
+                organizationId
+        )).thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> incidentService.assignTeam(
+                        organizationId,
+                        incidentId,
+                        teamId
+                )
+        );
+
+        verify(teamRepository, never())
+                .findByIdAndOrganizationId(any(), any());
+
+        verify(incidentRepository, never())
+                .save(any(Incident.class));
+    }
+
+    private Organization createOrganization(
+            UUID organizationId,
+            String name,
+            String slug,
+            OffsetDateTime createdAt
+    ) {
+        return new Organization(
+                organizationId,
+                name,
+                slug,
+                OrganizationStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+    }
+
+    private Team createTeam(
+            UUID teamId,
+            Organization organization,
+            String name,
+            OffsetDateTime createdAt
+    ) {
+        return new Team(
+                teamId,
+                organization,
+                name,
+                null,
+                TeamStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+    }
+
+    private User createUser(
+            UUID userId,
+            Organization organization,
+            String email,
+            OffsetDateTime createdAt
+    ) {
+        return new User(
+                userId,
+                organization,
+                email,
+                "John",
+                "Doe",
+                UserRole.ENGINEER,
+                UserStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
+    }
+
+    private com.opsguard.service.Service createService(
+            UUID serviceId,
+            Organization organization,
+            Team ownerTeam,
+            OffsetDateTime createdAt
+    ) {
+        return new com.opsguard.service.Service(
+                serviceId,
+                organization,
+                "Payment API",
+                null,
+                ownerTeam,
+                ServiceCriticality.CRITICAL,
+                ServiceStatus.ACTIVE,
+                createdAt,
+                createdAt
+        );
     }
 
     private Incident createIncident(

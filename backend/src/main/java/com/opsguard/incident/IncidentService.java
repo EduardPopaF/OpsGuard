@@ -1,9 +1,13 @@
 package com.opsguard.incident;
 
+import com.opsguard.common.exception.AssignmentConflictException;
 import com.opsguard.common.exception.ResourceNotFoundException;
 import com.opsguard.organization.Organization;
 import com.opsguard.organization.OrganizationRepository;
 import com.opsguard.service.ServiceRepository;
+import com.opsguard.team.Team;
+import com.opsguard.team.TeamMemberRepository;
+import com.opsguard.team.TeamRepository;
 import com.opsguard.user.User;
 import com.opsguard.user.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +23,8 @@ public class IncidentService {
     private final OrganizationRepository organizationRepository;
     private final ServiceRepository serviceRepository;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final IncidentNumberGenerator incidentNumberGenerator;
 
     public IncidentService(
@@ -26,12 +32,16 @@ public class IncidentService {
             OrganizationRepository organizationRepository,
             ServiceRepository serviceRepository,
             UserRepository userRepository,
+            TeamRepository teamRepository,
+            TeamMemberRepository teamMemberRepository,
             IncidentNumberGenerator incidentNumberGenerator
     ) {
         this.incidentRepository = incidentRepository;
         this.organizationRepository = organizationRepository;
         this.serviceRepository = serviceRepository;
         this.userRepository = userRepository;
+        this.teamRepository = teamRepository;
+        this.teamMemberRepository = teamMemberRepository;
         this.incidentNumberGenerator = incidentNumberGenerator;
     }
 
@@ -118,7 +128,153 @@ public class IncidentService {
             UUID incidentId,
             IncidentLifecycleAction action
     ) {
-        Incident incident = incidentRepository
+        Incident incident = findIncident(
+                organizationId,
+                incidentId
+        );
+
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        switch (action) {
+            case ACKNOWLEDGE ->
+                    incident.acknowledge(now);
+            case START_INVESTIGATION ->
+                    incident.startInvestigation(now);
+            case MITIGATE ->
+                    incident.mitigate(now);
+            case START_MONITORING ->
+                    incident.startMonitoring(now);
+            case RESOLVE ->
+                    incident.resolve(now);
+            case CLOSE ->
+                    incident.close(now);
+        }
+
+        return incidentRepository.save(incident);
+    }
+
+    @Transactional
+    public Incident assignTeam(
+            UUID organizationId,
+            UUID incidentId,
+            UUID teamId
+    ) {
+        Incident incident = findIncident(
+                organizationId,
+                incidentId
+        );
+
+        Team team = teamRepository
+                .findByIdAndOrganizationId(
+                        teamId,
+                        organizationId
+                )
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Team with id '"
+                                + teamId
+                                + "' does not exist in this organization."
+                ));
+
+        incident.assignTeam(
+                team,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return incidentRepository.save(incident);
+    }
+
+    @Transactional
+    public Incident assignUser(
+            UUID organizationId,
+            UUID incidentId,
+            UUID userId
+    ) {
+        Incident incident = findIncident(
+                organizationId,
+                incidentId
+        );
+
+        Team assignedTeam = incident.getAssignedTeam();
+
+        if (assignedTeam == null) {
+            throw new AssignmentConflictException(
+                    "An incident must have an assigned team before a user can be assigned."
+            );
+        }
+
+        User user = userRepository
+                .findByIdAndOrganizationId(
+                        userId,
+                        organizationId
+                )
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "User with id '"
+                                + userId
+                                + "' does not exist in this organization."
+                ));
+
+        boolean isTeamMember =
+                teamMemberRepository.existsByTeamIdAndUserId(
+                        assignedTeam.getId(),
+                        userId
+                );
+
+        if (!isTeamMember) {
+            throw new AssignmentConflictException(
+                    "User with id '"
+                            + userId
+                            + "' is not a member of the assigned team."
+            );
+        }
+
+        incident.assignUser(
+                user,
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return incidentRepository.save(incident);
+    }
+
+    @Transactional
+    public Incident unassignUser(
+            UUID organizationId,
+            UUID incidentId
+    ) {
+        Incident incident = findIncident(
+                organizationId,
+                incidentId
+        );
+
+        incident.unassignUser(
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return incidentRepository.save(incident);
+    }
+
+    @Transactional
+    public Incident unassignTeam(
+            UUID organizationId,
+            UUID incidentId
+    ) {
+        Incident incident = findIncident(
+                organizationId,
+                incidentId
+        );
+
+        incident.unassignTeam(
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return incidentRepository.save(incident);
+    }
+
+    private Incident findIncident(
+            UUID organizationId,
+            UUID incidentId
+    ) {
+        return incidentRepository
                 .findByIdAndOrganizationId(
                         incidentId,
                         organizationId
@@ -128,30 +284,5 @@ public class IncidentService {
                                 + incidentId
                                 + "' does not exist in this organization."
                 ));
-
-        OffsetDateTime now =
-                OffsetDateTime.now(ZoneOffset.UTC);
-
-        switch (action) {
-            case ACKNOWLEDGE ->
-                    incident.acknowledge(now);
-
-            case START_INVESTIGATION ->
-                    incident.startInvestigation(now);
-
-            case MITIGATE ->
-                    incident.mitigate(now);
-
-            case START_MONITORING ->
-                    incident.startMonitoring(now);
-
-            case RESOLVE ->
-                    incident.resolve(now);
-
-            case CLOSE ->
-                    incident.close(now);
-        }
-
-        return incidentRepository.save(incident);
     }
 }

@@ -56,4 +56,36 @@ public class IncidentController {
 
         return IncidentResponse.from(incident);
     }
+
+    @PostMapping("/{incidentId}/assignment/team")
+    public IncidentResponse assignTeam(
+            @PathVariable UUID organizationId,
+            @PathVariable UUID incidentId,
+            @Valid @RequestBody AssignIncidentTeamRequest request
+    ) {
+        Incident incident =
+                incidentService.assignTeam(
+                        organizationId,
+                        incidentId,
+                        request.teamId()
+                );
+
+        return IncidentResponse.from(incident);
+    }
+
+    @PostMapping("/{incidentId}/assignment/user")
+    public IncidentResponse assignUser(
+            @PathVariable UUID organizationId,
+            @PathVariable UUID incidentId,
+            @Valid @RequestBody AssignIncidentUserRequest request
+    ) {
+        Incident incident =
+                incidentService.assignUser(
+                        organizationId,
+                        incidentId,
+                        request.userId()
+                );
+
+        return IncidentResponse.from(incident);
+    }
 }

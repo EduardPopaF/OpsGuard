@@ -161,6 +161,56 @@ public class Incident {
         updatedAt = occurredAt;
     }
 
+    public void assignTeam(
+            Team team,
+            OffsetDateTime occurredAt
+    ) {
+        if (team == null) {
+            throw new IllegalArgumentException(
+                    "Assigned team is required."
+            );
+        }
+
+        if (assignedTeam == null
+                || !assignedTeam.getId().equals(team.getId())) {
+            assignedUser = null;
+        }
+
+        assignedTeam = team;
+        updatedAt = occurredAt;
+    }
+
+    public void assignUser(
+            User user,
+            OffsetDateTime occurredAt
+    ) {
+        if (user == null) {
+            throw new IllegalArgumentException(
+                    "Assigned user is required."
+            );
+        }
+
+        if (assignedTeam == null) {
+            throw new IllegalStateException(
+                    "An incident must have an assigned team before a user can be assigned."
+            );
+        }
+
+        assignedUser = user;
+        updatedAt = occurredAt;
+    }
+
+    public void unassignUser(OffsetDateTime occurredAt) {
+        assignedUser = null;
+        updatedAt = occurredAt;
+    }
+
+    public void unassignTeam(OffsetDateTime occurredAt) {
+        assignedTeam = null;
+        assignedUser = null;
+        updatedAt = occurredAt;
+    }
+
     private void requireStatus(IncidentStatus requiredStatus) {
         if (status != requiredStatus) {
             throw new InvalidStateTransitionException(
