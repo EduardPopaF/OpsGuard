@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -96,6 +97,30 @@ public class GlobalExceptionHandler {
                 "MALFORMED_REQUEST",
                 "Request body is malformed or contains invalid values.",
                 Map.of(),
+                request.getRequestURI(),
+                OffsetDateTime.now(ZoneOffset.UTC)
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(response);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException exception,
+            HttpServletRequest request
+    ) {
+        Map<String, String> errors = Map.of(
+                exception.getName(),
+                "Invalid value."
+        );
+
+        ApiErrorResponse response = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "INVALID_PARAMETER",
+                "Request contains an invalid parameter.",
+                errors,
                 request.getRequestURI(),
                 OffsetDateTime.now(ZoneOffset.UTC)
         );
