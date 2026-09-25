@@ -39,6 +39,7 @@ class IncidentServiceTest {
 
     private IncidentRepository incidentRepository;
     private IncidentAssignmentRepository incidentAssignmentRepository;
+    private TimelineEventRepository timelineEventRepository;
     private OrganizationRepository organizationRepository;
     private ServiceRepository serviceRepository;
     private UserRepository userRepository;
@@ -49,6 +50,8 @@ class IncidentServiceTest {
 
     @BeforeEach
     void setUp() {
+        timelineEventRepository =
+        mock(TimelineEventRepository.class);
         incidentRepository = mock(IncidentRepository.class);
         incidentAssignmentRepository =
                 mock(IncidentAssignmentRepository.class);
@@ -60,15 +63,16 @@ class IncidentServiceTest {
         incidentNumberGenerator = mock(IncidentNumberGenerator.class);
 
         incidentService = new IncidentService(
-                incidentRepository,
-                incidentAssignmentRepository,
-                organizationRepository,
-                serviceRepository,
-                userRepository,
-                teamRepository,
-                teamMemberRepository,
-                incidentNumberGenerator
-        );
+        incidentRepository,
+        incidentAssignmentRepository,
+        timelineEventRepository,
+        organizationRepository,
+        serviceRepository,
+        userRepository,
+        teamRepository,
+        teamMemberRepository,
+        incidentNumberGenerator
+);
     }
 
     @Test
@@ -160,8 +164,80 @@ class IncidentServiceTest {
         assertNotNull(result.getUpdatedAt());
 
         verify(incidentRepository).save(any(Incident.class));
+        
     }
 
+          @Test
+void shouldRecordTimelineEventWhenIncidentIsCreated() {
+    UUID organizationId = UUID.randomUUID();
+    UUID teamId = UUID.randomUUID();
+    UUID serviceId = UUID.randomUUID();
+    UUID userId = UUID.randomUUID();
+
+    OffsetDateTime now =
+            OffsetDateTime.now(ZoneOffset.UTC);
+
+    Organization organization = createOrganization(
+            organizationId,
+            "Acme Corporation",
+            "acme-corporation",
+            now
+    );
+
+    Team ownerTeam = createTeam(
+            teamId,
+            organization,
+            "Platform Engineering",
+            now
+    );
+
+    com.opsguard.service.Service affectedService =
+            createService(
+                    serviceId,
+                    organization,
+                    ownerTeam,
+                    now
+            );
+
+    User createdBy = createUser(
+            userId,
+            organization,
+            "engineer@acme.com",
+            now
+    );
+
+    when(organizationRepository.findById(organizationId))
+            .thenReturn(Optional.of(organization));
+
+    when(serviceRepository.findByIdAndOrganizationId(
+            serviceId,
+            organizationId
+    )).thenReturn(Optional.of(affectedService));
+
+    when(userRepository.findByIdAndOrganizationId(
+            userId,
+            organizationId
+    )).thenReturn(Optional.of(createdBy));
+
+    when(incidentNumberGenerator.nextIncidentNumber(
+            organizationId
+    )).thenReturn("INC-000001");
+
+    when(incidentRepository.save(any(Incident.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+    incidentService.create(
+            organizationId,
+            "Payment API unavailable",
+            "Customers cannot complete payments",
+            IncidentSeverity.SEV1,
+            serviceId,
+            userId
+    );
+
+    verify(timelineEventRepository)
+            .save(any(TimelineEvent.class));
+}     
     @Test
     void shouldConvertBlankDescriptionToNull() {
         UUID organizationId = UUID.randomUUID();
@@ -405,6 +481,38 @@ class IncidentServiceTest {
         verify(incidentRepository).save(incident);
     }
 
+           @Test
+void shouldRecordTimelineEventWhenIncidentIsAcknowledged() {
+    UUID organizationId = UUID.randomUUID();
+    UUID incidentId = UUID.randomUUID();
+
+    OffsetDateTime createdAt =
+            OffsetDateTime.now(ZoneOffset.UTC);
+
+    Incident incident = createIncident(
+            incidentId,
+            IncidentStatus.OPEN,
+            createdAt
+    );
+
+    when(incidentRepository.findByIdAndOrganizationId(
+            incidentId,
+            organizationId
+    )).thenReturn(Optional.of(incident));
+
+    when(incidentRepository.save(incident))
+            .thenReturn(incident);
+
+    incidentService.executeLifecycleAction(
+            organizationId,
+            incidentId,
+            IncidentLifecycleAction.ACKNOWLEDGE
+    );
+
+    verify(timelineEventRepository)
+            .save(any(TimelineEvent.class));
+}
+
     @Test
     void shouldExecuteCompleteLifecycle() {
         UUID organizationId = UUID.randomUUID();
@@ -606,6 +714,127 @@ class IncidentServiceTest {
 
         verify(incidentRepository).save(incident);
     }
+
+        @Test
+void shouldRecordTimelineEventWhenTeamIsAssigned() {
+    UUID organizationId = UUID.randomUUID();
+    UUID incidentId = UUID.randomUUID();
+    UUID teamId = UUID.randomUUID();
+
+    OffsetDateTime now =
+            OffsetDateTime.now(ZoneOffset.UTC);
+
+    Organization organization = createOrganization(
+            organizationId,
+            "Company A",
+            "company-a",
+            now
+    );
+
+    Team team = createTeam(
+            teamId,
+            organization,
+            "Platform Engineering",
+            now
+    );
+
+    Incident incident = createIncident(
+            incidentId,
+            IncidentStatus.OPEN,
+            now
+    );
+
+    when(incidentRepository.findByIdAndOrganizationId(
+            incidentId,
+            organizationId
+    )).thenReturn(Optional.of(incident));
+
+    when(teamRepository.findByIdAndOrganizationId(
+            teamId,
+            organizationId
+    )).thenReturn(Optional.of(team));
+
+    when(incidentAssignmentRepository
+            .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                    incidentId
+            ))
+            .thenReturn(Optional.empty());
+
+    when(incidentAssignmentRepository
+            .findFirstByIncidentIdAndAssignedTeamIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                    incidentId
+            ))
+            .thenReturn(Optional.empty());
+
+    when(incidentRepository.save(incident))
+            .thenReturn(incident);
+
+    incidentService.assignTeam(
+            organizationId,
+            incidentId,
+            teamId
+    );
+
+    verify(timelineEventRepository)
+            .save(any(TimelineEvent.class));
+}
+
+        @Test
+void shouldNotRecordTimelineEventWhenSameTeamIsAssignedAgain() {
+    UUID organizationId = UUID.randomUUID();
+    UUID incidentId = UUID.randomUUID();
+    UUID teamId = UUID.randomUUID();
+
+    OffsetDateTime now =
+            OffsetDateTime.now(ZoneOffset.UTC);
+
+    Organization organization = createOrganization(
+            organizationId,
+            "Company A",
+            "company-a",
+            now
+    );
+
+    Team team = createTeam(
+            teamId,
+            organization,
+            "Platform Engineering",
+            now
+    );
+
+    Incident incident = createIncident(
+            incidentId,
+            IncidentStatus.OPEN,
+            now
+    );
+
+    incident.assignTeam(
+            team,
+            now
+    );
+
+    when(incidentRepository.findByIdAndOrganizationId(
+            incidentId,
+            organizationId
+    )).thenReturn(Optional.of(incident));
+
+    when(teamRepository.findByIdAndOrganizationId(
+            teamId,
+            organizationId
+    )).thenReturn(Optional.of(team));
+
+    when(incidentRepository.save(incident))
+            .thenReturn(incident);
+
+    incidentService.assignTeam(
+            organizationId,
+            incidentId,
+            teamId
+    );
+
+    verify(timelineEventRepository, never())
+            .save(any(TimelineEvent.class));
+}
 
     @Test
     void shouldRejectTeamFromDifferentOrganization() {

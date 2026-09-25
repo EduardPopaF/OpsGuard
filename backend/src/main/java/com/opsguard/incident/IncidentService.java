@@ -21,6 +21,7 @@ public class IncidentService {
 
     private final IncidentRepository incidentRepository;
     private final IncidentAssignmentRepository incidentAssignmentRepository;
+    private final TimelineEventRepository timelineEventRepository;
     private final OrganizationRepository organizationRepository;
     private final ServiceRepository serviceRepository;
     private final UserRepository userRepository;
@@ -31,6 +32,7 @@ public class IncidentService {
     public IncidentService(
             IncidentRepository incidentRepository,
             IncidentAssignmentRepository incidentAssignmentRepository,
+            TimelineEventRepository timelineEventRepository,
             OrganizationRepository organizationRepository,
             ServiceRepository serviceRepository,
             UserRepository userRepository,
@@ -40,6 +42,7 @@ public class IncidentService {
     ) {
         this.incidentRepository = incidentRepository;
         this.incidentAssignmentRepository = incidentAssignmentRepository;
+        this.timelineEventRepository = timelineEventRepository;
         this.organizationRepository = organizationRepository;
         this.serviceRepository = serviceRepository;
         this.userRepository = userRepository;
@@ -122,7 +125,18 @@ public class IncidentService {
                 now
         );
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        recordTimelineEvent(
+                savedIncident,
+                TimelineEventType.INCIDENT_CREATED,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     @Transactional
@@ -139,22 +153,62 @@ public class IncidentService {
         OffsetDateTime now =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
+        TimelineEventType eventType;
+
         switch (action) {
-            case ACKNOWLEDGE ->
-                    incident.acknowledge(now);
-            case START_INVESTIGATION ->
-                    incident.startInvestigation(now);
-            case MITIGATE ->
-                    incident.mitigate(now);
-            case START_MONITORING ->
-                    incident.startMonitoring(now);
-            case RESOLVE ->
-                    incident.resolve(now);
-            case CLOSE ->
-                    incident.close(now);
+            case ACKNOWLEDGE -> {
+                incident.acknowledge(now);
+                eventType =
+                        TimelineEventType.INCIDENT_ACKNOWLEDGED;
+            }
+
+            case START_INVESTIGATION -> {
+                incident.startInvestigation(now);
+                eventType =
+                        TimelineEventType.INVESTIGATION_STARTED;
+            }
+
+            case MITIGATE -> {
+                incident.mitigate(now);
+                eventType =
+                        TimelineEventType.INCIDENT_MITIGATED;
+            }
+
+            case START_MONITORING -> {
+                incident.startMonitoring(now);
+                eventType =
+                        TimelineEventType.MONITORING_STARTED;
+            }
+
+            case RESOLVE -> {
+                incident.resolve(now);
+                eventType =
+                        TimelineEventType.INCIDENT_RESOLVED;
+            }
+
+            case CLOSE -> {
+                incident.close(now);
+                eventType =
+                        TimelineEventType.INCIDENT_CLOSED;
+            }
+
+            default -> throw new IllegalArgumentException(
+                    "Unsupported lifecycle action: " + action
+            );
         }
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        recordTimelineEvent(
+                savedIncident,
+                eventType,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     @Transactional
@@ -183,6 +237,7 @@ public class IncidentService {
                 OffsetDateTime.now(ZoneOffset.UTC);
 
         Team currentTeam = incident.getAssignedTeam();
+        User currentUser = incident.getAssignedUser();
 
         if (currentTeam != null
                 && currentTeam.getId().equals(team.getId())) {
@@ -225,7 +280,38 @@ public class IncidentService {
                 assignment
         );
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        if (currentUser != null) {
+            recordTimelineEvent(
+                    savedIncident,
+                    TimelineEventType.USER_UNASSIGNED,
+                    null,
+                    now,
+                    null
+            );
+        }
+
+        if (currentTeam != null) {
+            recordTimelineEvent(
+                    savedIncident,
+                    TimelineEventType.TEAM_UNASSIGNED,
+                    null,
+                    now,
+                    null
+            );
+        }
+
+        recordTimelineEvent(
+                savedIncident,
+                TimelineEventType.TEAM_ASSIGNED,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     @Transactional
@@ -313,7 +399,28 @@ public class IncidentService {
                 assignment
         );
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        if (currentUser != null) {
+            recordTimelineEvent(
+                    savedIncident,
+                    TimelineEventType.USER_UNASSIGNED,
+                    null,
+                    now,
+                    null
+            );
+        }
+
+        recordTimelineEvent(
+                savedIncident,
+                TimelineEventType.USER_ASSIGNED,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     @Transactional
@@ -346,7 +453,18 @@ public class IncidentService {
                 now
         );
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        recordTimelineEvent(
+                savedIncident,
+                TimelineEventType.USER_UNASSIGNED,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     @Transactional
@@ -362,7 +480,10 @@ public class IncidentService {
         OffsetDateTime now =
                 OffsetDateTime.now(ZoneOffset.UTC);
 
-        if (incident.getAssignedTeam() == null) {
+        Team currentTeam = incident.getAssignedTeam();
+        User currentUser = incident.getAssignedUser();
+
+        if (currentTeam == null) {
             incident.unassignTeam(
                     now
             );
@@ -384,7 +505,28 @@ public class IncidentService {
                 now
         );
 
-        return incidentRepository.save(incident);
+        Incident savedIncident =
+                incidentRepository.save(incident);
+
+        if (currentUser != null) {
+            recordTimelineEvent(
+                    savedIncident,
+                    TimelineEventType.USER_UNASSIGNED,
+                    null,
+                    now,
+                    null
+            );
+        }
+
+        recordTimelineEvent(
+                savedIncident,
+                TimelineEventType.TEAM_UNASSIGNED,
+                null,
+                now,
+                null
+        );
+
+        return savedIncident;
     }
 
     private void closeActiveTeamAssignment(
@@ -423,6 +565,28 @@ public class IncidentService {
                             assignment
                     );
                 });
+    }
+
+    private void recordTimelineEvent(
+            Incident incident,
+            TimelineEventType eventType,
+            User actorUser,
+            OffsetDateTime occurredAt,
+            String details
+    ) {
+        TimelineEvent timelineEvent =
+                new TimelineEvent(
+                        UUID.randomUUID(),
+                        incident,
+                        eventType,
+                        actorUser,
+                        occurredAt,
+                        details
+                );
+
+        timelineEventRepository.save(
+                timelineEvent
+        );
     }
 
     private Incident findIncident(
