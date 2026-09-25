@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 class IncidentServiceTest {
 
     private IncidentRepository incidentRepository;
+    private IncidentAssignmentRepository incidentAssignmentRepository;
     private OrganizationRepository organizationRepository;
     private ServiceRepository serviceRepository;
     private UserRepository userRepository;
@@ -49,6 +50,8 @@ class IncidentServiceTest {
     @BeforeEach
     void setUp() {
         incidentRepository = mock(IncidentRepository.class);
+        incidentAssignmentRepository =
+                mock(IncidentAssignmentRepository.class);
         organizationRepository = mock(OrganizationRepository.class);
         serviceRepository = mock(ServiceRepository.class);
         userRepository = mock(UserRepository.class);
@@ -58,6 +61,7 @@ class IncidentServiceTest {
 
         incidentService = new IncidentService(
                 incidentRepository,
+                incidentAssignmentRepository,
                 organizationRepository,
                 serviceRepository,
                 userRepository,
@@ -569,6 +573,18 @@ class IncidentServiceTest {
                 organizationId
         )).thenReturn(Optional.of(team));
 
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.empty());
+
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedTeamIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.empty());
+
         when(incidentRepository.save(incident))
                 .thenReturn(incident);
 
@@ -584,6 +600,9 @@ class IncidentServiceTest {
                 teamId,
                 organizationId
         );
+
+        verify(incidentAssignmentRepository)
+                .save(any(IncidentAssignment.class));
 
         verify(incidentRepository).save(incident);
     }
@@ -623,6 +642,9 @@ class IncidentServiceTest {
         );
 
         assertNull(incident.getAssignedTeam());
+
+        verify(incidentAssignmentRepository, never())
+                .save(any(IncidentAssignment.class));
 
         verify(incidentRepository, never())
                 .save(any(Incident.class));
@@ -685,6 +707,12 @@ class IncidentServiceTest {
                 userId
         )).thenReturn(true);
 
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.empty());
+
         when(incidentRepository.save(incident))
                 .thenReturn(incident);
 
@@ -705,6 +733,9 @@ class IncidentServiceTest {
                 teamId,
                 userId
         );
+
+        verify(incidentAssignmentRepository)
+                .save(any(IncidentAssignment.class));
 
         verify(incidentRepository).save(incident);
     }
@@ -743,6 +774,9 @@ class IncidentServiceTest {
 
         verify(teamMemberRepository, never())
                 .existsByTeamIdAndUserId(any(), any());
+
+        verify(incidentAssignmentRepository, never())
+                .save(any(IncidentAssignment.class));
 
         verify(incidentRepository, never())
                 .save(any(Incident.class));
@@ -816,6 +850,9 @@ class IncidentServiceTest {
 
         assertNull(incident.getAssignedUser());
 
+        verify(incidentAssignmentRepository, never())
+                .save(any(IncidentAssignment.class));
+
         verify(incidentRepository, never())
                 .save(any(Incident.class));
     }
@@ -879,6 +916,9 @@ class IncidentServiceTest {
         verify(teamMemberRepository, never())
                 .existsByTeamIdAndUserId(any(), any());
 
+        verify(incidentAssignmentRepository, never())
+                .save(any(IncidentAssignment.class));
+
         verify(incidentRepository, never())
                 .save(any(Incident.class));
     }
@@ -889,7 +929,7 @@ class IncidentServiceTest {
         UUID incidentId = UUID.randomUUID();
 
         OffsetDateTime now =
-                OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(5);
 
         Organization organization = createOrganization(
                 organizationId,
@@ -928,10 +968,28 @@ class IncidentServiceTest {
                 now.plusMinutes(2)
         );
 
+        IncidentAssignment activeUserAssignment =
+                new IncidentAssignment(
+                        UUID.randomUUID(),
+                        incident,
+                        null,
+                        user,
+                        null,
+                        now.plusMinutes(2),
+                        null,
+                        null
+                );
+
         when(incidentRepository.findByIdAndOrganizationId(
                 incidentId,
                 organizationId
         )).thenReturn(Optional.of(incident));
+
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.of(activeUserAssignment));
 
         when(incidentRepository.save(incident))
                 .thenReturn(incident);
@@ -942,6 +1000,10 @@ class IncidentServiceTest {
         );
 
         assertNull(result.getAssignedUser());
+        assertNotNull(activeUserAssignment.getUnassignedAt());
+
+        verify(incidentAssignmentRepository)
+                .save(activeUserAssignment);
 
         verify(incidentRepository).save(incident);
     }
@@ -952,7 +1014,7 @@ class IncidentServiceTest {
         UUID incidentId = UUID.randomUUID();
 
         OffsetDateTime now =
-                OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(5);
 
         Organization organization = createOrganization(
                 organizationId,
@@ -991,10 +1053,46 @@ class IncidentServiceTest {
                 now.plusMinutes(2)
         );
 
+        IncidentAssignment activeTeamAssignment =
+                new IncidentAssignment(
+                        UUID.randomUUID(),
+                        incident,
+                        team,
+                        null,
+                        null,
+                        now.plusMinutes(1),
+                        null,
+                        null
+                );
+
+        IncidentAssignment activeUserAssignment =
+                new IncidentAssignment(
+                        UUID.randomUUID(),
+                        incident,
+                        null,
+                        user,
+                        null,
+                        now.plusMinutes(2),
+                        null,
+                        null
+                );
+
         when(incidentRepository.findByIdAndOrganizationId(
                 incidentId,
                 organizationId
         )).thenReturn(Optional.of(incident));
+
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.of(activeUserAssignment));
+
+        when(incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedTeamIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                ))
+                .thenReturn(Optional.of(activeTeamAssignment));
 
         when(incidentRepository.save(incident))
                 .thenReturn(incident);
@@ -1006,6 +1104,15 @@ class IncidentServiceTest {
 
         assertNull(result.getAssignedTeam());
         assertNull(result.getAssignedUser());
+
+        assertNotNull(activeTeamAssignment.getUnassignedAt());
+        assertNotNull(activeUserAssignment.getUnassignedAt());
+
+        verify(incidentAssignmentRepository)
+                .save(activeTeamAssignment);
+
+        verify(incidentAssignmentRepository)
+                .save(activeUserAssignment);
 
         verify(incidentRepository).save(incident);
     }
@@ -1032,6 +1139,9 @@ class IncidentServiceTest {
 
         verify(teamRepository, never())
                 .findByIdAndOrganizationId(any(), any());
+
+        verify(incidentAssignmentRepository, never())
+                .save(any(IncidentAssignment.class));
 
         verify(incidentRepository, never())
                 .save(any(Incident.class));

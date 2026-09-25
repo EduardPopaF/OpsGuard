@@ -20,6 +20,7 @@ import java.util.UUID;
 public class IncidentService {
 
     private final IncidentRepository incidentRepository;
+    private final IncidentAssignmentRepository incidentAssignmentRepository;
     private final OrganizationRepository organizationRepository;
     private final ServiceRepository serviceRepository;
     private final UserRepository userRepository;
@@ -29,6 +30,7 @@ public class IncidentService {
 
     public IncidentService(
             IncidentRepository incidentRepository,
+            IncidentAssignmentRepository incidentAssignmentRepository,
             OrganizationRepository organizationRepository,
             ServiceRepository serviceRepository,
             UserRepository userRepository,
@@ -37,6 +39,7 @@ public class IncidentService {
             IncidentNumberGenerator incidentNumberGenerator
     ) {
         this.incidentRepository = incidentRepository;
+        this.incidentAssignmentRepository = incidentAssignmentRepository;
         this.organizationRepository = organizationRepository;
         this.serviceRepository = serviceRepository;
         this.userRepository = userRepository;
@@ -176,9 +179,50 @@ public class IncidentService {
                                 + "' does not exist in this organization."
                 ));
 
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        Team currentTeam = incident.getAssignedTeam();
+
+        if (currentTeam != null
+                && currentTeam.getId().equals(team.getId())) {
+            incident.assignTeam(
+                    team,
+                    now
+            );
+
+            return incidentRepository.save(incident);
+        }
+
+        closeActiveUserAssignment(
+                incidentId,
+                now
+        );
+
+        closeActiveTeamAssignment(
+                incidentId,
+                now
+        );
+
         incident.assignTeam(
                 team,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                now
+        );
+
+        IncidentAssignment assignment =
+                new IncidentAssignment(
+                        UUID.randomUUID(),
+                        incident,
+                        team,
+                        null,
+                        null,
+                        now,
+                        null,
+                        null
+                );
+
+        incidentAssignmentRepository.save(
+                assignment
         );
 
         return incidentRepository.save(incident);
@@ -228,9 +272,45 @@ public class IncidentService {
             );
         }
 
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        User currentUser = incident.getAssignedUser();
+
+        if (currentUser != null
+                && currentUser.getId().equals(user.getId())) {
+            incident.assignUser(
+                    user,
+                    now
+            );
+
+            return incidentRepository.save(incident);
+        }
+
+        closeActiveUserAssignment(
+                incidentId,
+                now
+        );
+
         incident.assignUser(
                 user,
-                OffsetDateTime.now(ZoneOffset.UTC)
+                now
+        );
+
+        IncidentAssignment assignment =
+                new IncidentAssignment(
+                        UUID.randomUUID(),
+                        incident,
+                        null,
+                        user,
+                        null,
+                        now,
+                        null,
+                        null
+                );
+
+        incidentAssignmentRepository.save(
+                assignment
         );
 
         return incidentRepository.save(incident);
@@ -246,8 +326,24 @@ public class IncidentService {
                 incidentId
         );
 
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        if (incident.getAssignedUser() == null) {
+            incident.unassignUser(
+                    now
+            );
+
+            return incidentRepository.save(incident);
+        }
+
+        closeActiveUserAssignment(
+                incidentId,
+                now
+        );
+
         incident.unassignUser(
-                OffsetDateTime.now(ZoneOffset.UTC)
+                now
         );
 
         return incidentRepository.save(incident);
@@ -263,11 +359,70 @@ public class IncidentService {
                 incidentId
         );
 
+        OffsetDateTime now =
+                OffsetDateTime.now(ZoneOffset.UTC);
+
+        if (incident.getAssignedTeam() == null) {
+            incident.unassignTeam(
+                    now
+            );
+
+            return incidentRepository.save(incident);
+        }
+
+        closeActiveUserAssignment(
+                incidentId,
+                now
+        );
+
+        closeActiveTeamAssignment(
+                incidentId,
+                now
+        );
+
         incident.unassignTeam(
-                OffsetDateTime.now(ZoneOffset.UTC)
+                now
         );
 
         return incidentRepository.save(incident);
+    }
+
+    private void closeActiveTeamAssignment(
+            UUID incidentId,
+            OffsetDateTime occurredAt
+    ) {
+        incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedTeamIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                )
+                .ifPresent(assignment -> {
+                    assignment.close(
+                            occurredAt
+                    );
+
+                    incidentAssignmentRepository.save(
+                            assignment
+                    );
+                });
+    }
+
+    private void closeActiveUserAssignment(
+            UUID incidentId,
+            OffsetDateTime occurredAt
+    ) {
+        incidentAssignmentRepository
+                .findFirstByIncidentIdAndAssignedUserIsNotNullAndUnassignedAtIsNullOrderByAssignedAtDesc(
+                        incidentId
+                )
+                .ifPresent(assignment -> {
+                    assignment.close(
+                            occurredAt
+                    );
+
+                    incidentAssignmentRepository.save(
+                            assignment
+                    );
+                });
     }
 
     private Incident findIncident(
